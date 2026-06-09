@@ -29,13 +29,17 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
 
-      - name: Type-check
+      - name: Type-check & build
         run: npm run build
 
-      - name: Deploy to Fly.io
+      - name: Setup flyctl
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --remote-only
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
