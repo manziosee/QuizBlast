@@ -1,13 +1,10 @@
 app = "quizblast-backend"
-primary_region = "jnb"          # Johannesburg — closest to Kigali
+primary_region = "jnb"
 kill_signal = "SIGINT"
 kill_timeout = "5s"
 
 [build]
   dockerfile = "Dockerfile"
-
-[deploy]
-  release_command = "node dist/prisma-migrate.js"
 
 [env]
   NODE_ENV = "production"
@@ -26,6 +23,6 @@ kill_timeout = "5s"
     soft_limit = 400
 
 [[vm]]
-  memory = "512mb"
+  memory   = "512mb"
   cpu_kind = "shared"
-  cpus = 1
+  cpus     = 1
