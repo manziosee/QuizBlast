@@ -33,41 +33,6 @@ services:
       timeout: 5s
       retries: 5
 
-  server:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: quizblast_server
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      PORT: 4000
-      DATABASE_URL: postgresql://quizblast:quizblast_secret@postgres:5432/quizblast_db
-      REDIS_URL: redis://redis:6379
-      CLIENT_URL: http://localhost:3000
-    ports:
-      - "4000:4000"
-
-  web:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: quizblast_web
-    restart: unless-stopped
-    depends_on:
-      - server
-    environment:
-      NODE_ENV: production
-      NEXT_PUBLIC_SERVER_URL: http://localhost:4000
-      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
-    ports:
-      - "3000:3000"
-
 volumes:
   postgres_data:
   redis_data:

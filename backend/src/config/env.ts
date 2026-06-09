@@ -2,13 +2,18 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const env = {
-  NODE_ENV: process.env.NODE_ENV ?? "development",
-  PORT: parseInt(process.env.PORT ?? "4000", 10),
+  NODE_ENV:     process.env.NODE_ENV     ?? "development",
+  PORT:         parseInt(process.env.PORT ?? "4000", 10),
   DATABASE_URL: process.env.DATABASE_URL ?? "",
-  REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379",
-  CLIENT_URL: process.env.CLIENT_URL ?? "http://localhost:3000",
+  REDIS_URL:    process.env.REDIS_URL    ?? "redis://localhost:6379",
+  CLIENT_URL:   process.env.CLIENT_URL   ?? "http://localhost:3000",
 };
 
-if (!env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required — copy .env.example to .env");
+const missing = (["DATABASE_URL"] as const).filter((k) => !env[k]);
+if (missing.length) {
+  throw new Error(`Missing required env vars: ${missing.join(", ")}`);
+}
+
+if (env.NODE_ENV === "production" && env.REDIS_URL.startsWith("redis://")) {
+  throw new Error("Production REDIS_URL must use rediss:// for TLS connections.");
 }

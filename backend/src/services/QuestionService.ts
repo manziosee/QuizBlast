@@ -17,23 +17,74 @@ function mapRow(q: {
   };
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
+const QUESTION_PLAN = [
+  { difficulty: "easy", count: 3 },
+  { difficulty: "medium", count: 3 },
+  { difficulty: "hard", count: 4 },
+] as const;
+
+async function selectRandomByDifficulty(
+  categoryId: number,
+  difficulty: string,
+  count: number,
+  excludedIds: Set<string>
+): Promise<Question[]> {
+  const picked: Question[] = [];
+
+  while (picked.length < count) {
+    const where = {
+      categoryId,
+      difficulty,
+      id: excludedIds.size ? { notIn: [...excludedIds] } : undefined,
+    };
+    const remaining = await prisma.question.count({ where });
+    if (remaining === 0) break;
+
+    const [row] = await prisma.question.findMany({
+      where,
+      include: { category: true },
+      orderBy: { id: "asc" },
+      skip: Math.floor(Math.random() * remaining),
+      take: 1,
+    });
+    if (!row) break;
+
+    excludedIds.add(row.id);
+    picked.push(mapRow(row));
+  }
+
+  return picked;
 }
 
-export async function selectQuestionsForGame(category: Category): Promise<Question[]> {
+// Returns up to 10 questions per category: 3 easy, 3 medium, 4 hard.
+// Uses random indexed reads instead of loading the whole question table.
+export async function selectQuestionsForGame(category: Category, excludedIds = new Set<string>()): Promise<Question[]> {
   const cat = await prisma.category.findUnique({ where: { name: category } });
   if (!cat) throw new Error(`Unknown category: ${category}`);
 
-  const [easy, medium, hard] = await Promise.all([
-    prisma.question.findMany({ where: { categoryId: cat.id, difficulty: "easy" }, include: { category: true } }),
-    prisma.question.findMany({ where: { categoryId: cat.id, difficulty: "medium" }, include: { category: true } }),
-    prisma.question.findMany({ where: { categoryId: cat.id, difficulty: "hard" }, include: { category: true } }),
-  ]);
+  const selected: Question[] = [];
+  for (const { difficulty, count } of QUESTION_PLAN) {
+    selected.push(...await selectRandomByDifficulty(cat.id, difficulty, count, excludedIds));
+  }
 
-  return [
-    ...shuffle(easy).slice(0, 3),
-    ...shuffle(medium).slice(0, 3),
-    ...shuffle(hard).slice(0, 4),
-  ].map(mapRow);
+  return selected;
+}
+
+// Select questions for multiple players with different categories (individual mode)
+// Returns a map of playerId → Question[]
+export async function selectQuestionsPerPlayer(
+  players: { id: string; category?: string }[]
+): Promise<Map<string, Question[]>> {
+  const result = new Map<string, Question[]>();
+  const usedByCategory = new Map<string, Set<string>>();
+
+  for (const player of players) {
+    const cat = (player.category ?? "common") as Category;
+    const excludedIds = usedByCategory.get(cat) ?? new Set<string>();
+    const questions = await selectQuestionsForGame(cat, excludedIds);
+    usedByCategory.set(cat, excludedIds);
+    result.set(player.id, questions);
+  }
+
+  return result;
 }

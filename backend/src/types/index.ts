@@ -12,6 +12,7 @@ export interface Player {
   answers: PlayerAnswer[];
   isHost: boolean;
   isConnected: boolean;
+  category?: string; // individual mode: player's chosen category
 }
 
 export interface PlayerAnswer {
@@ -73,6 +74,7 @@ export interface Room {
 }
 
 export interface RoomSummary {
+  id: string;
   code: string;
   joinUrl: string;
   qrCodeBase64: string;
@@ -89,6 +91,7 @@ export interface ClientToServerEvents {
   "room:start": (data: { roomId: string }) => void;
   "room:set-category": (data: { roomId: string; mode: CategoryMode; category?: Category }) => void;
   "player:set-category": (data: { roomId: string; category: Category }) => void;
+  "room:kick": (data: { roomId: string; playerId: string }) => void;
   "game:submit-answer": (data: { roomId: string; questionId: string; answer: "A" | "B" | "C" | "D" }) => void;
 }
 
@@ -105,6 +108,7 @@ export interface ServerToClientEvents {
   }) => void;
   "game:question-result": (result: QuestionResult) => void;
   "game:ended": (rankings: PlayerRanking[]) => void;
+  "game:leaderboard": (rankings: PlayerRanking[]) => void;
   "game:tick": (secondsLeft: number) => void;
   "error": (message: string) => void;
 }

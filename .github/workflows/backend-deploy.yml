@@ -39,6 +39,23 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
 
+      - name: Seed database (skip if questions already exist)
+        run: |
+          COUNT=$(node -e "
+            const { PrismaClient } = require('@prisma/client');
+            const p = new PrismaClient();
+            p.question.count().then(n => { console.log(n); p.\$disconnect(); });
+          ")
+          if [ "$COUNT" = "0" ]; then
+            echo "Seeding database..."
+            npm run db:seed
+          else
+            echo "Database already has $COUNT questions — skipping seed."
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}
+
       - name: Type-check & build
         run: npm run build
 

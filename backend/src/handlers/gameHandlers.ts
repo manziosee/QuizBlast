@@ -1,12 +1,21 @@
 import { Server, Socket } from "socket.io";
 import { getRoomById, setRoomCategory, lockRoom } from "../services/RoomService";
-import { startGame, recordAnswer } from "../services/GameService";
+import { startGame, recordAnswer, checkAndCleanEmptyRooms } from "../services/GameService";
 import type { ClientToServerEvents, ServerToClientEvents } from "../types";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
+// Clean up timers for rooms where all players left — runs every 5 minutes
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+export function startCleanupInterval(io: IO): void {
+  if (cleanupInterval) return;
+  cleanupInterval = setInterval(() => checkAndCleanEmptyRooms(io), 5 * 60 * 1000);
+}
+
 export function registerGameHandlers(io: IO, socket: AppSocket): void {
+
   socket.on("room:set-category", async ({ roomId, mode, category }) => {
     const room = await getRoomById(roomId);
     if (!room || room.hostId !== socket.id) return;
@@ -21,6 +30,15 @@ export function registerGameHandlers(io: IO, socket: AppSocket): void {
     if (room.players.length === 0) {
       socket.emit("error", "Need at least one player to start.");
       return;
+    }
+
+    // In individual mode, check all players have picked a category
+    if (room.categoryMode === "individual") {
+      const missing = room.players.filter((p) => !p.category);
+      if (missing.length > 0) {
+        socket.emit("error", `Waiting for ${missing.length} player(s) to pick a category.`);
+        return;
+      }
     }
 
     const locked = await lockRoom(room);

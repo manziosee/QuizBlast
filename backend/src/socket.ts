@@ -2,7 +2,7 @@ import { Server as HTTPServer } from "http";
 import { Server } from "socket.io";
 import { env } from "./config/env";
 import { registerRoomHandlers } from "./handlers/roomHandlers";
-import { registerGameHandlers } from "./handlers/gameHandlers";
+import { registerGameHandlers, startCleanupInterval } from "./handlers/gameHandlers";
 import type { ClientToServerEvents, ServerToClientEvents } from "./types";
 
 export function createSocketServer(httpServer: HTTPServer): Server {
@@ -10,6 +10,8 @@ export function createSocketServer(httpServer: HTTPServer): Server {
     cors: { origin: env.CLIENT_URL, methods: ["GET", "POST"], credentials: true },
     transports: ["websocket", "polling"],
   });
+
+  startCleanupInterval(io);
 
   io.on("connection", (socket) => {
     console.log(`+ socket connected: ${socket.id}`);
