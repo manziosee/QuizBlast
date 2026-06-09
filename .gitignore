@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Env files (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Prisma — keep migrations/ tracked (needed for `prisma migrate deploy` on Fly)
+# DO NOT add prisma/migrations/ here
+
+# Fly.io
+.fly/
+
+# Vercel
+.vercel/
+
+# Coverage
+coverage/
