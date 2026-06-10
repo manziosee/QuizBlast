@@ -9,6 +9,8 @@ export const swaggerSpec = {
 
 ---
 
+## Multiplayer Mode
+
 **Socket.io events (Client → Server):**
 - \`room:create\` — host creates a room (callback returns RoomSummary)
 - \`room:join\` — player joins with name + avatar (callback returns join result)
@@ -28,7 +30,28 @@ export const swaggerSpec = {
 - \`game:leaderboard\` — live rankings after each question
 - \`game:answer-count\` — how many players have answered the current question
 - \`game:ended\` — game over, final rankings
-- \`error\` — error message string (e.g. room not found, kicked, host disconnected)`,
+- \`error\` — error message string (e.g. room not found, kicked, host disconnected)
+
+---
+
+## Solo Mode
+
+Player vs system — 10 questions, AI-generated (MMLU dataset + Groq fallback). 30s per question.
+
+**Socket.io events (Client → Server):**
+- \`solo:start\` — start a solo session; payload \`{ category, difficulty }\`; callback returns \`{ sessionId, question, index, total, timerEndsAt, totalMs }\`
+- \`solo:answer\` — submit an answer; payload \`{ sessionId, answer: "A"|"B"|"C"|"D" }\`
+- \`solo:abandon\` — cancel the session early; payload \`{ sessionId }\`
+
+**Socket.io events (Server → Client):**
+- \`solo:question\` — next question delivered; payload \`{ sessionId, question, index, total, timerEndsAt, totalMs }\`
+- \`solo:result\` — answer result; payload \`{ isCorrect, correctAnswer, explanation, score }\`
+- \`solo:ended\` — session complete; payload \`{ score, correctCount, totalQuestions, maxScore, percentage }\`
+
+**Question sources (all free):**
+- Math → procedural generator (infinite, no API)
+- Science / History / Geography / Common → MMLU dataset (HuggingFace)
+- Fallback → Groq \`llama-3.1-8b-instant\``,
     contact: { name: "Osee Manzi", url: "https://github.com/manziosee/QuizBlast" },
   },
   servers: [
@@ -40,6 +63,7 @@ export const swaggerSpec = {
     { name: "Rooms",      description: "Game room management and player info" },
     { name: "Categories", description: "Question categories" },
     { name: "Questions",  description: "Question bank with filtering and pagination" },
+    { name: "Solo",       description: "Solo mode — 1-player vs system via Socket.io" },
   ],
   components: {
     schemas: {
@@ -88,6 +112,39 @@ export const swaggerSpec = {
       Error: {
         type: "object",
         properties: { error: { type: "string" } },
+      },
+      SoloStartCallback: {
+        type: "object",
+        description: "Callback payload from solo:start",
+        properties: {
+          sessionId:   { type: "string", format: "uuid", description: "Unique solo session ID" },
+          question:    { "$ref": "#/components/schemas/Question" },
+          index:       { type: "integer", example: 0, description: "Question index (0-based)" },
+          total:       { type: "integer", example: 10, description: "Total questions in session" },
+          timerEndsAt: { type: "integer", example: 1700000030000, description: "Unix ms when timer expires" },
+          totalMs:     { type: "integer", example: 30000, description: "Total timer duration in ms" },
+        },
+      },
+      SoloResult: {
+        type: "object",
+        description: "Payload from solo:result event",
+        properties: {
+          isCorrect:     { type: "boolean" },
+          correctAnswer: { type: "string", enum: ["A", "B", "C", "D"] },
+          explanation:   { type: "string" },
+          score:         { type: "integer", description: "Cumulative score after this answer" },
+        },
+      },
+      SoloEnded: {
+        type: "object",
+        description: "Payload from solo:ended event",
+        properties: {
+          score:          { type: "integer", example: 700 },
+          correctCount:   { type: "integer", example: 7 },
+          totalQuestions: { type: "integer", example: 10 },
+          maxScore:       { type: "integer", example: 1000 },
+          percentage:     { type: "integer", example: 70, description: "Score as % of max" },
+        },
       },
     },
   },
@@ -328,6 +385,173 @@ export const swaggerSpec = {
               },
             },
           },
+        },
+      },
+    },
+
+    // ── Solo Mode (Socket.io — documented as reference paths) ────────────────
+    "/solo/start": {
+      post: {
+        summary: "solo:start — begin a solo session",
+        description: `**Socket.io event, not an HTTP endpoint.**
+Emit \`solo:start\` with category + difficulty to create a session.
+The acknowledgement callback returns the first question and session metadata.
+
+\`\`\`js
+socket.emit("solo:start", { category: "history", difficulty: "mixed" }, (res) => {
+  // res.sessionId, res.question, res.index, res.total, res.timerEndsAt, res.totalMs
+});
+\`\`\``,
+        tags: ["Solo"],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["category", "difficulty"],
+                properties: {
+                  category:   { type: "string", enum: ["math", "science", "history", "geography", "common"] },
+                  difficulty: { type: "string", enum: ["easy", "medium", "hard", "mixed"], description: "mixed = 30% easy / 45% medium / 25% hard" },
+                },
+              },
+              example: { category: "history", difficulty: "mixed" },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Session created — first question returned via callback",
+            content: {
+              "application/json": {
+                schema: { "$ref": "#/components/schemas/SoloStartCallback" },
+                example: {
+                  sessionId:   "c2f1a3b4-...",
+                  index:       0,
+                  total:       10,
+                  timerEndsAt: 1700000030000,
+                  totalMs:     30000,
+                  question: {
+                    id: "uuid", category: "history", difficulty: "medium",
+                    text: "Which empire controlled most of North Africa in the 7th century?",
+                    options: { A: "Roman Empire", B: "Byzantine Empire", C: "Ottoman Empire", D: "Mongol Empire" },
+                    correctAnswer: "B",
+                    explanation: "The Byzantine Empire held North Africa until the Arab conquests of the 7th century.",
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/solo/answer": {
+      post: {
+        summary: "solo:answer — submit an answer",
+        description: `**Socket.io event, not an HTTP endpoint.**
+Emit \`solo:answer\` with sessionId and selected option.
+Server cancels the 30s timer, evaluates the answer, emits \`solo:result\`, then sends \`solo:question\` after 4s (or \`solo:ended\` on the last question).
+
+\`\`\`js
+socket.emit("solo:answer", { sessionId: "c2f1a3b4-...", answer: "B" });
+\`\`\``,
+        tags: ["Solo"],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sessionId", "answer"],
+                properties: {
+                  sessionId: { type: "string", format: "uuid" },
+                  answer:    { type: "string", enum: ["A", "B", "C", "D"] },
+                },
+              },
+              example: { sessionId: "c2f1a3b4-...", answer: "B" },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: "Server emits solo:result then solo:question (or solo:ended)",
+            content: {
+              "application/json": {
+                schema: { "$ref": "#/components/schemas/SoloResult" },
+                example: { isCorrect: true, correctAnswer: "B", explanation: "The Byzantine Empire...", score: 100 },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/solo/question": {
+      get: {
+        summary: "solo:question — next question event",
+        description: `**Socket.io server-to-client event.**
+Automatically emitted 4 seconds after \`solo:result\` for questions 1–9.
+Not emitted on the last question — \`solo:ended\` is emitted instead.
+
+Payload shape: \`{ sessionId, question, index, total, timerEndsAt, totalMs }\``,
+        tags: ["Solo"],
+        responses: {
+          200: {
+            description: "Next question payload",
+            content: {
+              "application/json": {
+                schema: { "$ref": "#/components/schemas/SoloStartCallback" },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/solo/ended": {
+      get: {
+        summary: "solo:ended — session complete event",
+        description: `**Socket.io server-to-client event.**
+Emitted after the result of question 10. Contains final stats.
+
+Payload shape: \`{ score, correctCount, totalQuestions, maxScore, percentage }\``,
+        tags: ["Solo"],
+        responses: {
+          200: {
+            description: "Final session stats",
+            content: {
+              "application/json": {
+                schema: { "$ref": "#/components/schemas/SoloEnded" },
+                example: { score: 700, correctCount: 7, totalQuestions: 10, maxScore: 1000, percentage: 70 },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/solo/abandon": {
+      delete: {
+        summary: "solo:abandon — cancel the session",
+        description: `**Socket.io event, not an HTTP endpoint.**
+Emit \`solo:abandon\` to clean up the server-side session early (e.g. player navigates away).
+
+\`\`\`js
+socket.emit("solo:abandon", { sessionId: "c2f1a3b4-..." });
+\`\`\``,
+        tags: ["Solo"],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["sessionId"],
+                properties: { sessionId: { type: "string", format: "uuid" } },
+              },
+              example: { sessionId: "c2f1a3b4-..." },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Session deleted — no response emitted" },
         },
       },
     },
