@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { env } from "./config/env";
 import { registerRoomHandlers } from "./handlers/roomHandlers";
 import { registerGameHandlers, startCleanupInterval } from "./handlers/gameHandlers";
+import { registerSoloHandlers } from "./handlers/soloHandlers";
 import type { ClientToServerEvents, ServerToClientEvents } from "./types";
 
 export function createSocketServer(httpServer: HTTPServer): Server {
@@ -21,6 +22,7 @@ export function createSocketServer(httpServer: HTTPServer): Server {
     console.log(`+ socket connected: ${socket.id}`);
     registerRoomHandlers(io, socket);
     registerGameHandlers(io, socket);
+    registerSoloHandlers(io, socket);
     socket.on("disconnect", () => console.log(`- socket disconnected: ${socket.id}`));
   });
 

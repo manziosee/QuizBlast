@@ -13,6 +13,10 @@ export type ServerToClientEvents = {
   "game:ended":           (rankings: any[]) => void;
   "game:tick":            (secondsLeft: number) => void;
   "error":                (message: string) => void;
+  // Solo mode
+  "solo:question":        (data: { sessionId: string; question: any; index: number; total: number; timerEndsAt: number; totalMs: number }) => void;
+  "solo:result":          (data: { isCorrect: boolean; correctAnswer: "A" | "B" | "C" | "D"; explanation: string; score: number }) => void;
+  "solo:ended":           (data: { score: number; correctCount: number; totalQuestions: number; maxScore: number; percentage: number }) => void;
 };
 
 export type ClientToServerEvents = {
@@ -23,6 +27,10 @@ export type ClientToServerEvents = {
   "room:kick":            (data: { roomId: string; playerId: string }) => void;
   "player:set-category":  (data: { roomId: string; category: string }) => void;
   "game:submit-answer":   (data: { roomId: string; questionId: string; answer: string }) => void;
+  // Solo mode
+  "solo:start":           (data: { category: string; difficulty: string }, callback: (result: any) => void) => void;
+  "solo:answer":          (data: { sessionId: string; answer: "A" | "B" | "C" | "D" }) => void;
+  "solo:abandon":         (data: { sessionId: string }) => void;
 };
 
 let socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;

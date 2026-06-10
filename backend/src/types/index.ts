@@ -93,6 +93,20 @@ export interface ClientToServerEvents {
   "player:set-category": (data: { roomId: string; category: Category }) => void;
   "room:kick": (data: { roomId: string; playerId: string }) => void;
   "game:submit-answer": (data: { roomId: string; questionId: string; answer: "A" | "B" | "C" | "D" }) => void;
+  // Solo mode
+  "solo:start": (
+    data: { category: Category; difficulty: "easy" | "medium" | "hard" | "mixed" },
+    callback: (result: {
+      sessionId: string;
+      question: Question;
+      index: number;
+      total: number;
+      timerEndsAt: number;
+      totalMs: number;
+    }) => void
+  ) => void;
+  "solo:answer": (data: { sessionId: string; answer: "A" | "B" | "C" | "D" }) => void;
+  "solo:abandon": (data: { sessionId: string }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -113,4 +127,26 @@ export interface ServerToClientEvents {
   "game:answer-count": (data: { answered: number; total: number }) => void;
   "game:tick": (secondsLeft: number) => void;
   "error": (message: string) => void;
+  // Solo mode
+  "solo:question": (data: {
+    sessionId: string;
+    question: Question;
+    index: number;
+    total: number;
+    timerEndsAt: number;
+    totalMs: number;
+  }) => void;
+  "solo:result": (data: {
+    isCorrect: boolean;
+    correctAnswer: "A" | "B" | "C" | "D";
+    explanation: string;
+    score: number;
+  }) => void;
+  "solo:ended": (data: {
+    score: number;
+    correctCount: number;
+    totalQuestions: number;
+    maxScore: number;
+    percentage: number;
+  }) => void;
 }
