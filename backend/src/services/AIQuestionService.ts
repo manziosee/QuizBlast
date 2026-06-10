@@ -13,8 +13,46 @@ const CATEGORY_CONTEXT: Record<Exclude<Category, "math">, string> = {
   science:   "biology, chemistry, physics, astronomy, technology, inventions",
   history:   "world history, ancient civilizations, wars, empires, revolutions, historical figures",
   geography: "countries, capitals, continents, mountains, rivers, oceans, landmarks",
-  common:    "general knowledge, sports, music, food, animals, nature, famous people",
+  common:    "", // dynamically chosen below — see COMMON_TOPICS
 };
+
+// Each sub-array is a topic cluster for the "common" category.
+// One cluster is picked at random each call so Groq produces diverse questions.
+const COMMON_TOPICS: string[] = [
+  // Sports
+  "football (soccer) — clubs, players, World Cup, famous goals, records",
+  "Formula 1 — drivers, constructors, circuits, champions, race records",
+  "MotoGP — riders, manufacturers, circuits, world champions",
+  "volleyball — rules, famous players, Olympic history",
+  "basketball — NBA teams, legends, records, rules",
+  "tennis — Grand Slams, famous players, rules",
+  "athletics — Olympic records, sprinters, marathoners",
+  // Entertainment & pop culture
+  "music — famous bands, singers, albums, music history, genres",
+  "movies — blockbusters, directors, actors, Academy Awards, film history",
+  "TV shows — popular series, characters, streaming, TV history",
+  "actors and actresses — famous roles, awards, careers",
+  // Nature & geography features
+  "rivers and lakes — world's longest rivers, largest lakes, notable waterways",
+  "mountains — world's highest peaks, mountain ranges, famous climbs",
+  "animals and wildlife — behaviour, habitats, records (fastest, largest, etc.)",
+  "oceans and seas — depths, currents, marine life",
+  // Companies & brands
+  "global brands — Nike, Adidas, Puma, Apple, Google, Amazon, Microsoft histories",
+  "car manufacturers — BMW, Mercedes, Ferrari, Toyota, Ford — history and models",
+  "food & beverage brands — Coca-Cola, McDonald's, Nestlé, famous products",
+  // Technology & everyday life
+  "technology and gadgets — smartphones, internet, social media, inventions",
+  "everyday science — how common things work, basic physics in daily life",
+  "food and cooking — popular dishes, ingredients, world cuisines",
+  "human body — basic anatomy, health facts, senses",
+  // General knowledge
+  "world records — Guinness records, firsts, extremes",
+  "flags and national symbols — country flags, anthems, emblems",
+  "languages — most spoken, interesting linguistic facts",
+  "space and planets — solar system basics, famous missions, astronauts",
+  "common sense — things every child or adult should know about daily life",
+];
 
 function pickDifficulty(requested: SoloDifficulty): Difficulty {
   if (requested !== "mixed") return requested;
@@ -24,8 +62,24 @@ function pickDifficulty(requested: SoloDifficulty): Difficulty {
   return "hard";
 }
 
+const DIFFICULTY_FRAMING: Record<Difficulty, string> = {
+  easy:   "The question must be answerable by a 10-year-old child with no specialist knowledge.",
+  medium: "The question should suit a curious adult with general knowledge.",
+  hard:   "The question should require specific knowledge or research to answer correctly.",
+};
+
 function buildGroqPrompt(category: Exclude<Category, "math">, difficulty: Difficulty): string {
-  return `Generate one ${difficulty} multiple-choice quiz question about ${category} (topics: ${CATEGORY_CONTEXT[category]}).
+  let topicLine: string;
+  if (category === "common") {
+    const topic = COMMON_TOPICS[Math.floor(Math.random() * COMMON_TOPICS.length)];
+    topicLine = `Focus specifically on: ${topic}`;
+  } else {
+    topicLine = `Topics: ${CATEGORY_CONTEXT[category]}`;
+  }
+
+  return `Generate one ${difficulty} multiple-choice quiz question about ${category}.
+${topicLine}
+${DIFFICULTY_FRAMING[difficulty]}
 
 Return ONLY valid JSON, no markdown fences:
 {
