@@ -63,9 +63,13 @@ function pickDifficulty(requested: SoloDifficulty): Difficulty {
 }
 
 const DIFFICULTY_FRAMING: Record<Difficulty, string> = {
-  easy:   "The question must be answerable by a 10-year-old child with no specialist knowledge.",
-  medium: "The question should suit a curious adult with general knowledge.",
-  hard:   "The question should require specific knowledge or research to answer correctly.",
+  easy: `EASY difficulty — must be answerable by any 10-year-old child with zero specialist knowledge.
+Good examples: "How many legs does a dog have?" / "Which direction does the sun rise?" / "What do bees make?"
+If answering requires a textbook, a science class, or research — it is TOO HARD. Simplify it.`,
+  medium: `MEDIUM difficulty — a curious adult with general knowledge should know this.
+Think pub quiz / game show level. Not trivial, but not obscure academic knowledge either.`,
+  hard: `HARD difficulty — requires specific knowledge, deep familiarity, or research to answer correctly.
+Most adults should NOT know this off the top of their head.`,
 };
 
 function buildGroqPrompt(category: Exclude<Category, "math">, difficulty: Difficulty): string {
@@ -77,11 +81,12 @@ function buildGroqPrompt(category: Exclude<Category, "math">, difficulty: Diffic
     topicLine = `Topics: ${CATEGORY_CONTEXT[category]}`;
   }
 
-  return `Generate one ${difficulty} multiple-choice quiz question about ${category}.
+  return `Generate one multiple-choice quiz question about ${category}.
 ${topicLine}
+
 ${DIFFICULTY_FRAMING[difficulty]}
 
-Return ONLY valid JSON, no markdown fences:
+Return ONLY valid JSON — no markdown fences, no extra text:
 {
   "text": "the question ending with ?",
   "options": {"A": "option A", "B": "option B", "C": "option C", "D": "option D"},
@@ -90,10 +95,11 @@ Return ONLY valid JSON, no markdown fences:
 }
 
 Rules:
-- Options must be plausible (not obviously wrong)
-- correctAnswer must be "A", "B", "C", or "D"
+- All 4 options must be plausible (not obviously wrong)
+- correctAnswer must be exactly "A", "B", "C", or "D"
 - Each option under 60 characters
-- Factually accurate`;
+- Factually accurate
+- The question must be strictly about ${category} — do NOT generate math or arithmetic questions`;
 }
 
 async function generateGroqQuestion(
@@ -130,8 +136,8 @@ async function generateGroqQuestion(
   };
 }
 
-// Generate one question for solo mode
-// usedIds: IDs of questions already served this session (prevents MMLU repeats)
+// Generate one question for solo mode.
+// usedIds: IDs of questions already served this session (prevents MMLU repeats).
 export async function generateSoloQuestion(
   category: Category,
   difficulty: SoloDifficulty,
@@ -139,26 +145,47 @@ export async function generateSoloQuestion(
 ): Promise<Question> {
   const diff = pickDifficulty(difficulty);
 
-  // Math: always use procedural generator (infinite, no API)
+  // Math: always procedural — infinite supply, no API needed.
   if (category === "math") return generateMathQuestion(diff);
 
-  // Non-math: primary source is MMLU (free, high quality)
-  try {
-    const q = await getMmluQuestion(category, diff, usedIds);
-    if (q) return q;
-  } catch (err) {
-    console.warn(`[AIQuestionService] MMLU failed: ${(err as Error).message}`);
+  const cat = category as Exclude<Category, "math">;
+
+  // MMLU is skipped for:
+  //   "common"  — MMLU common subjects (nutrition, sociology, philosophy, etc.) are
+  //               university-level academic content, NOT common sense. Groq handles this.
+  //   "easy"    — MMLU "easy" subjects are still designed for academic testing and produce
+  //               questions far too hard for the easy tier. Groq respects the difficulty framing.
+  const useMmlu = cat !== "common" && diff !== "easy";
+
+  if (useMmlu) {
+    try {
+      const q = await getMmluQuestion(cat, diff, usedIds);
+      if (q) return q;
+    } catch (err) {
+      console.warn(`[AIQuestionService] MMLU failed: ${(err as Error).message}`);
+    }
   }
 
-  // Fallback: Groq (free tier, AI-generated)
-  try {
-    return await generateGroqQuestion(category as Exclude<Category, "math">, diff);
-  } catch (err) {
-    console.warn(`[AIQuestionService] Groq failed: ${(err as Error).message}`);
+  // Groq — 2 attempts (handles rate-limit hiccups).
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await generateGroqQuestion(cat, diff);
+    } catch (err) {
+      console.warn(`[AIQuestionService] Groq attempt ${attempt} failed: ${(err as Error).message}`);
+    }
   }
 
-  // Last resort: math question (always works)
-  return generateMathQuestion(diff);
+  // If Groq failed and we skipped MMLU, try MMLU now as last resort (not for common).
+  if (useMmlu === false && cat !== "common") {
+    try {
+      const q = await getMmluQuestion(cat, diff, usedIds);
+      if (q) return q;
+    } catch {}
+  }
+
+  // Absolute last resort: one more Groq call at easy difficulty for the correct category.
+  // NEVER fall back to math for a non-math category — that would show wrong questions.
+  return generateGroqQuestion(cat, "easy");
 }
 
 // Pre-generate multiple questions, tracking used IDs to avoid repeats
