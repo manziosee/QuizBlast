@@ -43,7 +43,7 @@ function HostContent() {
   const joinUrl = params.get("url")    ?? "";
 
   const router = useRouter();
-  const { room, setRoom, liveLeaderboard } = useGameStore();
+  const { room, setRoom, addPlayer, removePlayer, liveLeaderboard } = useGameStore();
 
   const [categoryMode, setCategoryMode] = useState<CategoryMode>("group");
   const [category, setCategory]         = useState<Category>("math");
@@ -61,34 +61,67 @@ function HostContent() {
     } catch {}
   }, [roomId, category]);
 
-  // Listen to socket events directly (host sees game progress, not player view)
+  // Rejoin the room channel and fetch current state.
+  // Called on mount and after every socket reconnection.
+  const rejoinRoom = useCallback(() => {
+    if (!roomId) return;
+    let socket: ReturnType<typeof getSocket>;
+    try { socket = getSocket(); } catch { return; }
+
+    socket.emit("room:host-reconnect", { roomId }, (res) => {
+      if (res?.success && res.room) setRoom(res.room);
+    });
+  }, [roomId, setRoom]);
+
+  // Listen to socket events (host view: game progress + player arrivals)
   useEffect(() => {
     if (!roomId) return;
     let socket: ReturnType<typeof getSocket>;
     try { socket = getSocket(); } catch { return; }
 
-    socket.on("room:updated", setRoom);
-    socket.on("game:question", ({ question, index, total }: any) => {
+    // Get fresh room state immediately (handles page reload and socket reconnect)
+    rejoinRoom();
+
+    const onRoomUpdated = (room: any) => setRoom(room);
+    const onPlayerJoined = (player: any) => addPlayer(player);
+    const onPlayerLeft   = (playerId: string) => removePlayer(playerId);
+
+    const onQuestion = ({ question, index, total }: any) => {
       setGameStarted(true);
       setCountdown(null);
       setCurrentQ({ text: question.text, index, total });
-    });
-    socket.on("game:ended", (rankings: PlayerRanking[]) => {
+    };
+
+    const onEnded = (_rankings: PlayerRanking[]) => {
       router.push(`/room/${roomId}/results`);
-    });
-    socket.on("error", (msg: string) => {
+    };
+
+    const onError = (msg: string) => {
       if (msg.includes("Waiting for") || msg.includes("Need at least")) {
         alert(msg);
       }
-    });
+    };
+
+    const onReconnect = () => rejoinRoom();
+
+    socket.on("room:updated",   onRoomUpdated);
+    socket.on("player:joined",  onPlayerJoined);
+    socket.on("player:left",    onPlayerLeft);
+    socket.on("game:question",  onQuestion);
+    socket.on("game:ended",     onEnded);
+    socket.on("error",          onError);
+    socket.io.on("reconnect",   onReconnect);
 
     return () => {
-      socket.off("room:updated");
-      socket.off("game:question");
-      socket.off("game:ended");
-      socket.off("error");
+      socket.off("room:updated",  onRoomUpdated);
+      socket.off("player:joined", onPlayerJoined);
+      socket.off("player:left",   onPlayerLeft);
+      socket.off("game:question", onQuestion);
+      socket.off("game:ended",    onEnded);
+      socket.off("error",         onError);
+      socket.io.off("reconnect",  onReconnect);
     };
-  }, [roomId, setRoom, router]);
+  }, [roomId, setRoom, addPlayer, removePlayer, router, rejoinRoom]);
 
   function copyCode() {
     navigator.clipboard.writeText(code).catch(() => {});

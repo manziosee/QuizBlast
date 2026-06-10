@@ -88,6 +88,10 @@ export interface ClientToServerEvents {
     data: { roomCode: string; name: string; avatar: AvatarSeed },
     callback: (result: { success: boolean; error?: string; room?: Room }) => void
   ) => void;
+  "room:host-reconnect": (
+    data: { roomId: string },
+    callback: (result: { success: boolean; error?: string; room?: Room }) => void
+  ) => void;
   "room:start": (data: { roomId: string }) => void;
   "room:set-category": (data: { roomId: string; mode: CategoryMode; category?: Category }) => void;
   "player:set-category": (data: { roomId: string; category: Category }) => void;

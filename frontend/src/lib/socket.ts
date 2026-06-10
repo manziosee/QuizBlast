@@ -22,6 +22,7 @@ export type ServerToClientEvents = {
 export type ClientToServerEvents = {
   "room:create":          (callback: (result: any) => void) => void;
   "room:join":            (data: { roomCode: string; name: string; avatar: string }, callback: (result: any) => void) => void;
+  "room:host-reconnect":  (data: { roomId: string }, callback: (result: any) => void) => void;
   "room:start":           (data: { roomId: string }) => void;
   "room:set-category":    (data: { roomId: string; mode: string; category?: string }) => void;
   "room:kick":            (data: { roomId: string; playerId: string }) => void;
