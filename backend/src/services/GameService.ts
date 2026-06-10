@@ -3,7 +3,7 @@ import { getRoomById, saveRoom } from "./RoomService";
 import { selectQuestionsForGame, selectQuestionsPerPlayer } from "./QuestionService";
 import type { Room, Question, PlayerRanking, ClientToServerEvents, ServerToClientEvents } from "../types";
 
-const QUESTION_MS = 60_000;
+export const QUESTION_MS = 60_000;
 const RESULT_MS   = 5_000;
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
@@ -22,9 +22,9 @@ export async function startGame(io: IO, roomId: string): Promise<void> {
   if (room.categoryMode === "individual") {
     const perPlayer = await selectQuestionsPerPlayer(room.players);
     playerQuestions.set(roomId, perPlayer);
-    // Use first player's questions as the "shared" list for timing — all 10 questions run on same clock
-    const first = room.players[0];
-    const questions = perPlayer.get(first.id) ?? await selectQuestionsForGame("common");
+    // Use first connected player's questions as the shared timing list
+    const first = room.players.find((p) => p.isConnected) ?? room.players[0];
+    const questions = (first ? perPlayer.get(first.id) : null) ?? await selectQuestionsForGame("common");
     roomQuestions.set(roomId, questions);
   } else {
     const questions = await selectQuestionsForGame(room.category ?? "common");
@@ -62,12 +62,12 @@ async function sendQuestion(io: IO, room: Room, index: number): Promise<void> {
         const pQuestion = pq[index];
         if (!pQuestion) continue;
         const { correctAnswer: _c, explanation: _e, ...pub } = pQuestion;
-        io.to(player.id).emit("game:question", { question: pub, index, total: questions.length, timerEndsAt });
+        io.to(player.id).emit("game:question", { question: pub, index, total: questions.length, timerEndsAt, totalMs: QUESTION_MS });
       }
     }
   } else {
     const { correctAnswer: _c, explanation: _e, ...pub } = question;
-    io.to(room.id).emit("game:question", { question: pub, index, total: questions.length, timerEndsAt });
+    io.to(room.id).emit("game:question", { question: pub, index, total: questions.length, timerEndsAt, totalMs: QUESTION_MS });
   }
 
   const timer = setTimeout(() => resolveQuestion(io, room.id, index), QUESTION_MS);

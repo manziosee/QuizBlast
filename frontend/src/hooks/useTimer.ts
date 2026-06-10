@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 
-export function useTimer(timerEndsAt: number | null) {
-  const [secondsLeft, setSecondsLeft] = useState(60);
+export function useTimer(timerEndsAt: number | null, totalMs = 60_000) {
+  const [secondsLeft, setSecondsLeft] = useState(totalMs / 1000);
 
   useEffect(() => {
     if (!timerEndsAt) return;
@@ -12,9 +12,10 @@ export function useTimer(timerEndsAt: number | null) {
     return () => clearInterval(id);
   }, [timerEndsAt]);
 
+  const totalSeconds = totalMs / 1000;
   return {
     secondsLeft,
-    percentage: (secondsLeft / 60) * 100,
+    percentage: (secondsLeft / totalSeconds) * 100,
     isUrgent: secondsLeft <= 10,
   };
 }

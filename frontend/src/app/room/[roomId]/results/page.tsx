@@ -1,6 +1,8 @@
 "use client";
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 import { useSocket } from "@/hooks/useSocket";
 import { useGameStore } from "@/store/gameStore";
 import { avatarUrl } from "@/lib/utils";
@@ -10,11 +12,22 @@ import RankingList from "@/components/results/RankingList";
 export default function ResultsPage() {
   const { roomId } = useParams<{ roomId: string }>();
   useSocket(roomId);
-  const { rankings, reset } = useGameStore();
+  const { rankings, myId, reset } = useGameStore();
   const router = useRouter();
 
   const top3 = rankings.slice(0, 3);
   const rest = rankings.slice(3);
+  const winner = rankings[0];
+
+  // Fire confetti if this player won
+  useEffect(() => {
+    if (rankings.length === 0) return;
+    if (rankings[0].player.id === myId) {
+      confetti({ particleCount: 180, spread: 90, origin: { y: 0.55 } });
+      setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.4, x: 0.2 }, angle: 60 }), 400);
+      setTimeout(() => confetti({ particleCount: 80, spread: 60, origin: { y: 0.4, x: 0.8 }, angle: 120 }), 600);
+    }
+  }, [rankings, myId]);
 
   function handlePlayAgain() {
     reset();
@@ -29,8 +42,6 @@ export default function ResultsPage() {
       </main>
     );
   }
-
-  const winner = rankings[0];
 
   return (
     <main className="min-h-screen px-4 py-8 max-w-2xl mx-auto space-y-6 relative overflow-hidden">
@@ -53,8 +64,14 @@ export default function ResultsPage() {
         </motion.div>
         <h1 className="text-4xl font-black">Game Over!</h1>
         <p className="text-white/50 text-sm">
-          <span className="text-amber-400 font-black">{winner.player.name}</span>
-          {" "}takes the crown! 👑
+          {winner.player.id === myId ? (
+            <span className="text-amber-400 font-black">🎉 You won! Absolute legend!</span>
+          ) : (
+            <>
+              <span className="text-amber-400 font-black">{winner.player.name}</span>
+              {" "}takes the crown! 👑
+            </>
+          )}
         </p>
       </motion.div>
 
@@ -96,7 +113,7 @@ export default function ResultsPage() {
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 1 + i * 0.07 }}
-              className="flex items-center gap-3"
+              className={`flex items-center gap-3 ${r.player.id === myId ? "opacity-100" : "opacity-70"}`}
             >
               <span className="text-white/25 text-xs font-black w-5 text-right tabular-nums flex-shrink-0">
                 {r.position}
@@ -108,6 +125,7 @@ export default function ResultsPage() {
               />
               <span className="text-sm font-bold text-white/65 flex-1 min-w-0 truncate">
                 {r.player.name}
+                {r.player.id === myId && <span className="text-violet-400 text-[10px] ml-1">(you)</span>}
               </span>
               <span className="text-white/30 text-[11px] font-bold flex-shrink-0">
                 {r.correctCount}/{r.correctCount + r.wrongCount}
@@ -122,6 +140,7 @@ export default function ResultsPage() {
 
       {/* Play again */}
       <motion.button
+        type="button"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.2 }}

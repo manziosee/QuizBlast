@@ -6,8 +6,12 @@ import { registerGameHandlers, startCleanupInterval } from "./handlers/gameHandl
 import type { ClientToServerEvents, ServerToClientEvents } from "./types";
 
 export function createSocketServer(httpServer: HTTPServer): Server {
+  const allowedOrigins = env.NODE_ENV === "production"
+    ? [env.CLIENT_URL, /^https:\/\/.*\.vercel\.app$/]
+    : true; // allow all in dev
+
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-    cors: { origin: env.CLIENT_URL, methods: ["GET", "POST"], credentials: true },
+    cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
     transports: ["websocket", "polling"],
   });
 

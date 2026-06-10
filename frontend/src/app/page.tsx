@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { generateMockRoom } from "@/lib/mock";
+import { getSocket, connectSocket } from "@/lib/socket";
+import { useGameStore } from "@/store/gameStore";
 import { CATEGORIES } from "@/lib/constants";
 
 const container = {
@@ -16,17 +17,35 @@ const item = {
 
 export default function LandingPage() {
   const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
   const router = useRouter();
+  const { setMyInfo } = useGameStore();
 
   async function handleStart() {
     setLoading(true);
+    setError("");
     try {
-      const { code, joinUrl, qrCodeBase64 } = await generateMockRoom();
-      router.push(
-        `/host?code=${code}&qr=${encodeURIComponent(qrCodeBase64)}&url=${encodeURIComponent(joinUrl)}`
+      const socket = getSocket();
+      if (!socket.connected) connectSocket();
+
+      const result = await new Promise<{ id: string; code: string; joinUrl: string; qrCodeBase64: string }>(
+        (resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error("Connection timeout — is the server running?")), 8000);
+          socket.emit("room:create", (res) => {
+            clearTimeout(timeout);
+            resolve(res);
+          });
+        }
       );
-    } catch {
-      alert("Failed to generate room. Please try again.");
+
+      // Store host identity (no name/avatar needed — host is not a player)
+      setMyInfo(socket.id ?? "", "Host", "naruto");
+
+      router.push(
+        `/host?roomId=${result.id}&code=${result.code}&qr=${encodeURIComponent(result.qrCodeBase64)}&url=${encodeURIComponent(result.joinUrl)}`
+      );
+    } catch (err: any) {
+      setError(err?.message ?? "Failed to create room. Please try again.");
       setLoading(false);
     }
   }
@@ -59,7 +78,7 @@ export default function LandingPage() {
           10 questions. 60 seconds each. One winner on a podium.
         </motion.p>
 
-        <motion.div variants={item}>
+        <motion.div variants={item} className="space-y-3">
           <motion.button
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.97 }}
@@ -74,7 +93,10 @@ export default function LandingPage() {
               </>
             ) : "🚀 Start a Game"}
           </motion.button>
-          <p className="text-white/25 text-xs mt-4">No sign-up needed · Just scan &amp; play</p>
+          {error && (
+            <p className="text-red-400 text-sm font-bold">{error}</p>
+          )}
+          <p className="text-white/25 text-xs">No sign-up needed · Just scan &amp; play</p>
         </motion.div>
 
         <motion.div variants={item} className="grid grid-cols-3 gap-3 mt-10">

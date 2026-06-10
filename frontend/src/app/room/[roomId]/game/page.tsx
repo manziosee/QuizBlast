@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSocket } from "@/hooks/useSocket";
@@ -23,14 +24,28 @@ export default function GamePage() {
     currentQuestion,
     questionIndex,
     timerEndsAt,
+    totalMs,
     myAnswer,
     lastResult,
     myId,
+    answeredCount,
+    isReconnecting,
     setAnswer,
-    skipFn,
-    setSkipFn,
   } = useGameStore();
-  const { secondsLeft, percentage, isUrgent } = useTimer(timerEndsAt);
+  const { secondsLeft, percentage, isUrgent } = useTimer(timerEndsAt, totalMs);
+
+  const [showScorePopup, setShowScorePopup] = useState(false);
+
+  // Trigger +100 popup when a correct result arrives
+  useEffect(() => {
+    if (!lastResult) return;
+    const myResult = lastResult.playerResults.find((r) => r.playerId === myId);
+    if (myResult?.isCorrect) {
+      setShowScorePopup(true);
+      const t = setTimeout(() => setShowScorePopup(false), 1800);
+      return () => clearTimeout(t);
+    }
+  }, [lastResult, myId]);
 
   function submitAnswer(answer: (typeof OPTIONS)[number]) {
     if (myAnswer || !currentQuestion || !room) return;
@@ -40,9 +55,16 @@ export default function GamePage() {
       questionId: currentQuestion.id,
       answer,
     });
-    // In mock mode: immediately trigger question resolution so result shows at once
-    skipFn?.();
-    setSkipFn(null);
+  }
+
+  if (isReconnecting) {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="w-8 h-8 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
+        <p className="text-amber-400 font-bold">Reconnecting…</p>
+        <p className="text-white/25 text-sm">Hold tight, we're getting you back in</p>
+      </main>
+    );
   }
 
   if (!currentQuestion) {
@@ -54,13 +76,29 @@ export default function GamePage() {
     );
   }
 
-  const myResult = lastResult?.playerResults.find((r) => r.playerId === myId);
-  const totalQ = room?.totalQuestions ?? 10;
-  const myScore = room?.players.find((p) => p.id === myId)?.score ?? 0;
-  const catMeta = getCategoryMeta(currentQuestion.category);
+  const myResult  = lastResult?.playerResults.find((r) => r.playerId === myId);
+  const totalQ    = room?.totalQuestions ?? 10;
+  const myScore   = room?.players.find((p) => p.id === myId)?.score ?? 0;
+  const totalPlayers = room?.players.length ?? 0;
+  const catMeta   = getCategoryMeta(currentQuestion.category);
 
   return (
-    <main className="min-h-screen px-4 py-5 max-w-2xl mx-auto flex flex-col gap-4">
+    <main className="min-h-screen px-4 py-5 max-w-2xl mx-auto flex flex-col gap-4 relative">
+      {/* +100 score popup */}
+      <AnimatePresence>
+        {showScorePopup && (
+          <motion.div
+            initial={{ opacity: 0, y: 0, scale: 0.8 }}
+            animate={{ opacity: 1, y: -60, scale: 1 }}
+            exit={{ opacity: 0, y: -100, scale: 0.8 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none"
+          >
+            <span className="text-4xl font-black text-emerald-400 drop-shadow-lg">+100</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top bar: category + timer */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -88,7 +126,7 @@ export default function GamePage() {
       {/* Timer bar */}
       <TimerBar percentage={percentage} isUrgent={isUrgent} />
 
-      {/* Progress dots */}
+      {/* Progress dots + answered counter */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
           {Array.from({ length: totalQ }).map((_, i) => (
@@ -104,9 +142,16 @@ export default function GamePage() {
             />
           ))}
         </div>
-        <span className="text-white/35 text-[11px] font-black tabular-nums">
-          🏆 {myScore.toLocaleString()} pts
-        </span>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {totalPlayers > 0 && (
+            <span className="text-white/30 text-[11px] font-bold tabular-nums">
+              ✅ {answeredCount}/{totalPlayers} answered
+            </span>
+          )}
+          <span className="text-white/35 text-[11px] font-black tabular-nums">
+            🏆 {myScore.toLocaleString()} pts
+          </span>
+        </div>
       </div>
 
       {/* Question */}
@@ -146,19 +191,17 @@ export default function GamePage() {
       {/* Status / Result */}
       <AnimatePresence mode="wait">
         {lastResult && myResult ? (
-          <motion.div key="result" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-3">
+          <motion.div key="result" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <ResultBanner isCorrect={myResult.isCorrect} explanation={lastResult.explanation} />
-            <motion.button
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => { skipFn?.(); setSkipFn(null); }}
-              className="w-full bg-white text-black font-black text-lg py-3.5 rounded-2xl hover:bg-white/90 transition-colors shadow-lg"
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-center text-white/30 text-sm font-bold mt-3 flex items-center justify-center gap-2"
             >
-              {questionIndex + 1 >= (room?.totalQuestions ?? 10) ? "See Results 🏆" : "Next Question →"}
-            </motion.button>
+              <span className="w-1.5 h-1.5 bg-white/30 rounded-full animate-pulse" />
+              {questionIndex + 1 >= totalQ ? "Calculating final scores…" : "Next question coming up…"}
+            </motion.p>
           </motion.div>
         ) : myAnswer ? (
           <motion.div

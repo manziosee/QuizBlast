@@ -105,10 +105,12 @@ export interface ServerToClientEvents {
     index: number;
     total: number;
     timerEndsAt: number;
+    totalMs: number;
   }) => void;
   "game:question-result": (result: QuestionResult) => void;
   "game:ended": (rankings: PlayerRanking[]) => void;
   "game:leaderboard": (rankings: PlayerRanking[]) => void;
+  "game:answer-count": (data: { answered: number; total: number }) => void;
   "game:tick": (secondsLeft: number) => void;
   "error": (message: string) => void;
 }

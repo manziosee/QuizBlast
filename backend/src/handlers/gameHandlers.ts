@@ -3,6 +3,16 @@ import { getRoomById, setRoomCategory, lockRoom } from "../services/RoomService"
 import { startGame, recordAnswer, checkAndCleanEmptyRooms } from "../services/GameService";
 import type { ClientToServerEvents, ServerToClientEvents } from "../types";
 
+// Simple per-socket event rate limiting: tracks last event timestamp per (socketId:event) key
+const lastEventTime = new Map<string, number>();
+function isRateLimited(socketId: string, event: string, minIntervalMs = 500): boolean {
+  const key = `${socketId}:${event}`;
+  const now = Date.now();
+  if (now - (lastEventTime.get(key) ?? 0) < minIntervalMs) return true;
+  lastEventTime.set(key, now);
+  return false;
+}
+
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
@@ -15,13 +25,6 @@ export function startCleanupInterval(io: IO): void {
 }
 
 export function registerGameHandlers(io: IO, socket: AppSocket): void {
-
-  socket.on("room:set-category", async ({ roomId, mode, category }) => {
-    const room = await getRoomById(roomId);
-    if (!room || room.hostId !== socket.id) return;
-    const updated = await setRoomCategory(room, mode, category);
-    io.to(roomId).emit("room:updated", updated);
-  });
 
   socket.on("room:start", async ({ roomId }) => {
     const room = await getRoomById(roomId);
@@ -49,6 +52,22 @@ export function registerGameHandlers(io: IO, socket: AppSocket): void {
   });
 
   socket.on("game:submit-answer", async ({ roomId, questionId, answer }) => {
+    if (isRateLimited(socket.id, "game:submit-answer", 500)) return;
     await recordAnswer(roomId, socket.id, questionId, answer);
+    const room = await getRoomById(roomId);
+    if (room) {
+      const answered = room.players.filter((p) =>
+        p.answers.some((a) => a.questionId === questionId)
+      ).length;
+      io.to(roomId).emit("game:answer-count", { answered, total: room.players.length });
+    }
+  });
+
+  socket.on("room:set-category", async ({ roomId, mode, category }) => {
+    if (isRateLimited(socket.id, "room:set-category", 1000)) return;
+    const room = await getRoomById(roomId);
+    if (!room || room.hostId !== socket.id) return;
+    const updated = await setRoomCategory(room, mode as any, category as any);
+    io.to(roomId).emit("room:updated", updated);
   });
 }

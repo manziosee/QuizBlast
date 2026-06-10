@@ -15,5 +15,9 @@ if (missing.length) {
 }
 
 if (env.NODE_ENV === "production" && env.REDIS_URL.startsWith("redis://")) {
-  throw new Error("Production REDIS_URL must use rediss:// for TLS connections.");
+  console.warn(
+    "[QuizBlast] WARNING: REDIS_URL uses plain redis:// in production. " +
+    "Set the REDIS_URL secret on Fly.io to a rediss:// Upstash URL for TLS. " +
+    "Continuing without Redis — room state will not persist across restarts."
+  );
 }
