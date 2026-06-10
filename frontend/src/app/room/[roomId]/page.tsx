@@ -25,8 +25,7 @@ export default function RoomPage() {
   function confirmCategory(cat: Category) {
     setMyCategory(cat);
     setConfirmed(true);
-    // When backend is live this emits player:set-category
-    socket.emit("player:set-category" as any, { roomId, category: cat });
+    socket.emit("player:set-category", { roomId, category: cat });
   }
 
   if (!room) {

@@ -26,7 +26,7 @@ interface GameState {
   setResult: (result: QuestionResult) => void;
   setRankings: (rankings: PlayerRanking[]) => void;
   setLiveLeaderboard: (rankings: PlayerRanking[]) => void;
-  setAnsweredCount: (answered: number, total: number) => void;
+  setAnsweredCount: (answered: number) => void;
   setReconnecting: (v: boolean) => void;
   reset: () => void;
 }
@@ -59,7 +59,7 @@ export const useGameStore = create<GameState>((set) => ({
   setResult: (result) => set({ lastResult: result }),
   setRankings: (rankings) => set({ rankings }),
   setLiveLeaderboard: (rankings) => set({ liveLeaderboard: rankings }),
-  setAnsweredCount: (answered) => set({ answeredCount: answered }),
+  setAnsweredCount: (answered: number) => set({ answeredCount: answered }),
   setReconnecting: (v) => set({ isReconnecting: v }),
   reset: () => set({
     room: null, currentQuestion: null, questionIndex: 0, timerEndsAt: null, totalMs: 60_000,

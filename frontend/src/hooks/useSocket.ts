@@ -40,7 +40,7 @@ export function useSocket(roomId?: string) {
     };
 
     const onAnswerCount = ({ answered }: { answered: number; total: number }) => {
-      setAnsweredCount(answered, 0);
+      setAnsweredCount(answered);
     };
 
     const onEnded = (rankings: any[]) => {
